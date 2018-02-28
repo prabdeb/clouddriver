@@ -103,7 +103,7 @@ class DockerRegistryClient {
       this.catalogFile = catalogFile
       return this
     }
-    
+
     Builder insecureRegistry(boolean insecureRegistry) {
       this.insecureRegistry = insecureRegistry
       return this
@@ -174,6 +174,20 @@ class DockerRegistryClient {
 
   DockerRegistryClient(String address, String email, String username, File passwordFile, long clientTimeoutMillis, int paginateSize, String catalogFile, boolean insecureRegistry) {
     this(address, clientTimeoutMillis, paginateSize, catalogFile, insecureRegistry)
+    String httpsProxy = System.getenv("HTTPS_PROXY") ?: System.getenv("https_proxy")
+    if (httpsProxy != null && httpsProxy != "") {
+      String proxyHostName = (((httpsProxy.split('://'))[1]).split(':'))[0]
+      Integer proxyPort = ((((httpsProxy.split('://'))[1]).split(':'))[1]).toInteger()
+      java.net.Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHostName, proxyPort))
+      OkHttpClient client = new OkHttpClient()
+      client = client.setProxy(proxy) //TODO(prbldeb) : Handle no proxy
+      this.registryService = new RestAdapter.Builder()
+        .setEndpoint(address)
+        .setClient(new OkClient(client))
+        .setLogLevel(RestAdapter.LogLevel.NONE)
+        .build()
+        .create(DockerRegistryService)
+    }
     this.tokenService = new DockerBearerTokenService(username, passwordFile)
     this.email = email
   }
@@ -403,7 +417,7 @@ class DockerRegistryClient {
         }
       } catch (RetrofitError error) {
         def status = error.response?.status
-        // note, this is a workaround for registries that should be returning 
+        // note, this is a workaround for registries that should be returning
         // 401 when a token expires
         if ([400, 401].contains(status)) {
           String authenticateHeader = null
